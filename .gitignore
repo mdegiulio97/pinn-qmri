@@ -1,0 +1,28 @@
+# Dati: dataset sintetico generato dagli script, non committato
+data/
+!data/.gitkeep
+
+# Checkpoint e artefatti pesanti
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.uv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Streamlit
+.streamlit/secrets.toml
