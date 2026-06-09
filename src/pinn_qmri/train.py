@@ -55,6 +55,7 @@ def train_pinn(
     te: np.ndarray,
     config: TrainConfig | None = None,
     device: torch.device | None = None,
+    mask: np.ndarray | None = None,
 ) -> tuple[PINN, np.ndarray, np.ndarray, list[float]]:
     """Addestra la PINN sui segnali e restituisce le mappe stimate.
 
@@ -63,6 +64,12 @@ def train_pinn(
         te:      (K,) tempi di eco (ms).
         config:  iperparametri (TrainConfig).
         device:  device torch; se None usa get_device().
+        mask:    (H, W) booleana opzionale. Se fornita, la rete e' addestrata SOLO
+                 sui voxel in mask: indispensabile sui dati reali, dove i voxel di
+                 background (primo eco ~0) producono normalizzazioni esplosive che
+                 altrimenti collassano la rete a un T2 costante. Con mask, il prior
+                 Total-Variation e' disattivato e le mappe restituite sono azzerate
+                 fuori dalla mask. Default None = comportamento invariato.
 
     Returns:
         (modello, s0_pred (H,W), t2_pred (H,W), storia_loss).
@@ -96,14 +103,25 @@ def train_pinn(
     optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
     mse = nn.MSELoss()
 
+    # Sottoinsieme di training: tutti i voxel, oppure solo quelli in mask.
+    if mask is not None:
+        idx = torch.from_numpy(np.flatnonzero(np.asarray(mask, dtype=bool).reshape(-1))).to(device)
+        x_tr = x[idx]
+        target_tr = target_norm[idx]
+    else:
+        x_tr = x
+        target_tr = target_norm
+
     history: list[float] = []
     for epoch in range(config.epochs):
         optimizer.zero_grad()
-        s0_norm, t2 = model(x)
-        recon = signal_torch(te_t, s0_norm, t2)  # (N, K) in scala normalizzata
-        loss = mse(recon, target_norm)
+        s0_norm, t2 = model(x_tr)
+        recon = signal_torch(te_t, s0_norm, t2)  # (N_tr, K) in scala normalizzata
+        loss = mse(recon, target_tr)
 
-        if config.lambda_tv > 0:
+        # Il prior Total-Variation richiede la griglia (H,W) completa: applicabile
+        # solo quando si addestra su tutta la slice (mask is None).
+        if config.lambda_tv > 0 and mask is None:
             t2_map = t2.reshape(h, w)
             loss = loss + config.lambda_tv * _tv_loss(t2_map)
 
@@ -118,5 +136,10 @@ def train_pinn(
         s0_norm, t2 = model(x)
         s0 = (s0_norm * scale_t).cpu().numpy().reshape(h, w)
         t2_map = t2.cpu().numpy().reshape(h, w)
+
+    if mask is not None:
+        m = np.asarray(mask, dtype=bool)
+        s0 = np.where(m, s0, 0.0)
+        t2_map = np.where(m, t2_map, 0.0)
 
     return model, s0.astype(np.float64), t2_map.astype(np.float64), history

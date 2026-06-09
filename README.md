@@ -109,6 +109,35 @@ Interpretazione: la PINN ottiene una mappa T2 con errore confrontabile (e più
 robusto al rumore grazie alla regolarizzazione) rispetto al fitting per-pixel ai
 minimi quadrati, processando tutti i pixel in un singolo forward batch.
 
+## Track dati reali (OpenNeuro ds007116, CC0)
+
+Oltre al track sintetico, il progetto applica la stessa inversione a **dati
+multi-echo GRE reali** (OpenNeuro **ds007116** "Penn LEAD", licenza CC0; 4 echi
+TE = 7.5/15/22.5/30 ms, 3T). Qui **non esiste ground truth**: la validazione è una
+**held-out echo cross-validation** (si stima `(S0, T2*)` da `K−1` echi e si predice
+l'eco escluso, NRMSE entro la brain mask). In una sequenza GRE il parametro è **T2\***.
+
+```bash
+uv run python scripts/download_real.py      # ~7 MB da S3 (dati gitignorati)
+uv run python scripts/evaluate_real.py      # PINN vs LS + held-out CV → results/
+```
+
+Numeri reali da `results/real_metrics.json` (slice 46, 9706 voxel in mask):
+
+| Metodo | T2\* mediano (ms) | NRMSE held-out (media) |
+|---|---|---|
+| PINN | **50.4** (IQR 39–58) | **0.075** |
+| Least-squares | 51.8 (IQR 38–63) | 0.100 |
+
+Entrambi danno T2\* fisiologici a 3T; la PINN, grazie alla regolarizzazione implicita
+della rete condivisa, **generalizza meglio sull'eco escluso** (0.075 vs 0.100). Report
+completo con citazioni: [`report/qmri_real_data.md`](report/qmri_real_data.md).
+
+> Nota metodologica (debugging documentato): applicando la PINN sintetica al reale, il
+> T2\* collassava a ~600 ms perché i voxel di background (primo eco ≈ 0) producevano
+> normalizzazioni esplosive che dominavano la loss. Fix: addestrare la PINN **solo entro
+> la brain mask** (`train_pinn(..., mask=...)`), con test di regressione.
+
 ## Note metodologiche e limiti
 
 - Modello mono-esponenziale: in tessuti reali T2 può essere multi-componente.

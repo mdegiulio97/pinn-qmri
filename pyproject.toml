@@ -11,6 +11,8 @@ dependencies = [
     "matplotlib>=3.8",
     "torch>=2.2",
     "streamlit>=1.36",
+    "nibabel>=5.2",
+    "requests>=2.31",
 ]
 
 [project.optional-dependencies]
