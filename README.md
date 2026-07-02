@@ -109,6 +109,11 @@ Interpretazione: la PINN ottiene una mappa T2 con errore confrontabile (e più
 robusto al rumore grazie alla regolarizzazione) rispetto al fitting per-pixel ai
 minimi quadrati, processando tutti i pixel in un singolo forward batch.
 
+La selezione del metodo migliore a un dato livello di rumore è programmatica:
+`best_model({"pinn": m_pinn, "ls": m_ls}, key="rmse")` restituisce il nome del
+modello con RMSE minore, mentre `rank_models(...)` ne fornisce la classifica
+completa (utile per riepiloghi automatici e regressioni sui risultati).
+
 ## Track dati reali (OpenNeuro ds007116, CC0)
 
 Oltre al track sintetico, il progetto applica la stessa inversione a **dati
