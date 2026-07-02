@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import numpy as np
 
 
@@ -48,3 +50,50 @@ def all_metrics(
         "rmse": rmse(pred, true, mask),
         "mape": mape(pred, true, mask),
     }
+
+
+def rank_models(
+    metrics: Mapping[str, Mapping[str, float]],
+    key: str = "rmse",
+    lower_is_better: bool = True,
+) -> list[tuple[str, float]]:
+    """Ordina i modelli per una metrica, dal migliore al peggiore.
+
+    Args:
+        metrics: mappa nome_modello -> dizionario di metriche
+            (ad esempio l'output di :func:`all_metrics` per ciascun modello).
+        key: nome della metrica su cui ordinare (default "rmse").
+        lower_is_better: se True valori piu' bassi sono migliori (errori come
+            MAE/RMSE); se False valori piu' alti sono migliori (ad esempio R^2).
+
+    Returns:
+        Lista di coppie ``(nome, valore)`` ordinata dal migliore al peggiore.
+        Su mappa vuota restituisce ``[]``. A parita' di valore l'ordine di
+        inserimento e' preservato (ordinamento stabile).
+    """
+    pairs = [(name, float(values[key])) for name, values in metrics.items()]
+    return sorted(pairs, key=lambda item: item[1], reverse=not lower_is_better)
+
+
+def best_model(
+    metrics: Mapping[str, Mapping[str, float]],
+    key: str = "rmse",
+    lower_is_better: bool = True,
+) -> str:
+    """Nome del modello migliore secondo una metrica.
+
+    Args:
+        metrics: mappa nome_modello -> dizionario di metriche.
+        key: nome della metrica su cui confrontare (default "rmse").
+        lower_is_better: se True valori piu' bassi sono migliori.
+
+    Returns:
+        Il nome del modello migliore.
+
+    Raises:
+        ValueError: se ``metrics`` e' vuoto (nessun modello da confrontare).
+    """
+    ranking = rank_models(metrics, key=key, lower_is_better=lower_is_better)
+    if not ranking:
+        raise ValueError("Nessun modello da confrontare: la mappa delle metriche e' vuota.")
+    return ranking[0][0]
