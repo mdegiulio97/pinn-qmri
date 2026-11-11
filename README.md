@@ -1,164 +1,181 @@
-# pinn-qmri — PINN per rilassometria T2 (qMRI)
+# pinn-qmri — PINN for T2 relaxometry (qMRI)
 
-Mini-progetto di ricerca *research-grade* che stima parametri quantitativi MRI
-(rilassometria **T2**) con una **Physics-Informed Neural Network (PINN)** addestrata
-in modo **non supervisionato**, e la confronta con la baseline classica di
-**fitting non lineare ai minimi quadrati** per-pixel.
+A small research project that estimates quantitative MRI parameters
+(**T2** relaxometry) with a **physics-informed neural network (PINN)** trained
+**without supervision**, and compares it with the classical baseline of per-pixel
+**nonlinear least-squares fitting**.
 
-## Idea in breve
+## The idea in brief
 
-Il segnale multi-eco di rilassometria T2 segue un decadimento mono-esponenziale:
+The multi-echo signal in T2 relaxometry follows a mono-exponential decay:
 
 ```
 S(TE) = S0 * exp(-TE / T2)
 ```
 
-A partire da `K` immagini acquisite a tempi di eco (`TE`) diversi vogliamo
-ricostruire, per ogni pixel, le mappe `S0` (ampiezza) e `T2` (tempo di rilassamento).
+Starting from `K` images acquired at different echo times (`TE`), we want to
+reconstruct, for every pixel, the maps `S0` (amplitude) and `T2` (relaxation time).
 
-- **PINN** (`src/pinn_qmri/model.py`, `train.py`): una rete `f_θ` mappa il vettore
-  dei `K` segnali di un pixel → `(S0, T2)`. Non usa etichette: viene addestrata
-  minimizzando una **loss di consistenza fisica**
-  `|| S0·exp(-TE/T2) − segnali_misurati ||²`, in cui il *forward model* fisico è
-  **embedded nella loss** (da qui *physics-informed*). Si può aggiungere un prior
-  di *smoothness* spaziale (regolarizzazione Total-Variation sulle mappe).
-- **Baseline** (`src/pinn_qmri/baseline.py`): `scipy.optimize.curve_fit` per-pixel
-  sullo stesso modello esponenziale.
+- **PINN** (`src/pinn_qmri/model.py`, `train.py`): a network `f_θ` maps the vector
+  of the `K` signals of a pixel → `(S0, T2)`. It uses no labels: it is trained by
+  minimising a **physical consistency loss**
+  `|| S0·exp(-TE/T2) − measured_signals ||²`, in which the physical *forward model*
+  is **embedded in the loss** (hence *physics-informed*). A spatial *smoothness*
+  prior (Total-Variation regularisation on the maps) can be added.
+- **Baseline** (`src/pinn_qmri/baseline.py`): per-pixel `scipy.optimize.curve_fit`
+  on the same exponential model.
 
-I dati sono **sintetici con ground truth**: generiamo mappe `(S0, T2)` spazialmente
-variabili (`src/pinn_qmri/synth.py`), simuliamo le `K` immagini a `TE` diversi
-(`physics.py`) e aggiungiamo rumore gaussiano o riciano. Questo permette di
-misurare l'errore reale (MAE) rispetto alla verità nota e la robustezza al rumore.
+The main track uses **synthetic data with ground truth**: we generate spatially
+varying `(S0, T2)` maps (`src/pinn_qmri/synth.py`), simulate the `K` images at
+different `TE` (`physics.py`) and add Gaussian or Rician noise. This makes it
+possible to measure the actual error (MAE) against the known truth and the
+robustness to noise. A second track applies the same inversion to real MRI data
+(see [Real-data track](#real-data-track-openneuro-ds007116-cc0)).
 
-## Struttura
+## Structure
 
 ```
 pinn-qmri/
-├── app/main.py                 # Demo Streamlit (genera → addestra PINN → confronta con LS)
+├── app/main.py                 # Streamlit demo (generate → train PINN → compare with LS)
 ├── src/pinn_qmri/
-│   ├── physics.py              # forward model S(TE)=S0*exp(-TE/T2) + generazione segnali
-│   ├── synth.py                # immagini sintetiche con mappe S0,T2 + rumore (gauss/rician)
-│   ├── model.py                # rete PINN (MLP per-pixel)
-│   ├── train.py                # loop di training con physics loss (+ smoothness opzionale)
-│   ├── baseline.py             # fitting least-squares per-pixel
-│   └── metrics.py              # MAE, RMSE, MAPE sulle mappe
-├── scripts/download_data.py    # genera/salva il dataset sintetico (idempotente)
-├── scripts/evaluate.py         # PINN vs LS su più livelli di rumore → results/
-├── tests/                      # pytest (offline, veloci, cpu)
+│   ├── physics.py              # forward model S(TE)=S0*exp(-TE/T2) + signal generation
+│   ├── synth.py                # synthetic images with S0,T2 maps + noise (gauss/rician)
+│   ├── model.py                # PINN network (per-pixel MLP)
+│   ├── train.py                # training loop with physics loss (+ optional smoothness)
+│   ├── baseline.py             # per-pixel least-squares fitting
+│   ├── metrics.py              # MAE, RMSE, MAPE on the maps
+│   └── real_data.py            # real multi-echo GRE loading, brain mask, held-out echo CV
+├── scripts/download_data.py    # generates/saves the synthetic dataset (idempotent)
+├── scripts/evaluate.py         # PINN vs LS over several noise levels → results/
+├── scripts/download_real.py    # downloads the real OpenNeuro subject (idempotent)
+├── scripts/evaluate_real.py    # PINN vs LS on real data + held-out echo CV → results/
+├── report/qmri_real_data.md    # short report on the real-data track
+├── tests/                      # pytest (offline, fast, cpu)
 ├── notebooks/01_validation.ipynb
-├── results/                    # figure PNG + metrics.json (committati)
-└── data/                       # dataset sintetico (gitignorato)
+├── results/                    # PNG figures + metrics JSON (committed)
+└── data/                       # synthetic and downloaded data (gitignored)
 ```
 
-## Installazione ed esecuzione
+## Installation and usage
 
-Richiede [uv](https://docs.astral.sh/uv/) e Python 3.12.
+Requires [uv](https://docs.astral.sh/uv/) and Python 3.12.
 
 ```bash
-uv sync --extra dev                       # crea il venv e installa le dipendenze
+uv sync --extra dev                       # create the venv and install dependencies
 uv run ruff check .                        # lint
-uv run pytest -q                           # test
-uv run python scripts/download_data.py     # genera il dataset sintetico in data/
-uv run python scripts/evaluate.py          # confronto PINN vs LS → results/
+uv run pytest -q                           # tests
+uv run python scripts/download_data.py     # generate the synthetic dataset in data/
+uv run python scripts/evaluate.py          # PINN vs LS comparison → results/
 ```
 
-`scripts/evaluate.py` produce `results/metrics.json` e le figure
-`results/maps_comparison.png` e `results/mae_vs_noise.png`.
+`scripts/evaluate.py` writes `results/metrics.json` and the figures
+`results/maps_comparison.png` and `results/mae_vs_noise.png`.
 
-## Approccio physics-informed
+## Physics-informed approach
 
-La rete non vede mai la ground truth `T2`. L'unico segnale di apprendimento è la
-**coerenza con il modello fisico**: dati i parametri `(S0, T2)` predetti, si
-ricostruisce il segnale `Ŝ(TE)=S0·exp(-TE/T2)` e si minimizza la distanza dai
-segnali misurati. È la stessa filosofia delle PINN di Raissi et al. (2019), qui
-applicata a un forward model algebrico (non un'equazione differenziale): la fisica
-del decadimento esponenziale è il vincolo che regolarizza l'inversione.
+The network never sees the ground-truth `T2`. The only learning signal is
+**consistency with the physical model**: given the predicted parameters `(S0, T2)`,
+the signal `Ŝ(TE)=S0·exp(-TE/T2)` is reconstructed and its distance from the
+measured signals is minimised. This is the same idea as the PINNs of Raissi et al.
+(2019), applied here to an algebraic forward model (not a differential equation):
+the physics of exponential decay is the constraint that regularises the inversion.
 
-Un prior di *smoothness* (Total Variation, peso `lambda_tv`) può essere aggiunto
-per stabilizzare la stima in presenza di rumore elevato.
+A *smoothness* prior (Total Variation, weight `lambda_tv`) can be added to
+stabilise the estimate at high noise.
 
-## Risultati
+## Results
 
-I numeri seguenti sono prodotti da `scripts/evaluate.py` su immagine 64×64,
-8 echi (TE = 10..80 ms), seed fisso. T2 in millisecondi. Tempi su CPU.
+The numbers below are produced by `scripts/evaluate.py` on a 64×64 image,
+8 echoes (TE = 10..80 ms), fixed seed. T2 in milliseconds. Times on CPU.
 
 <!-- RESULTS_TABLE_START -->
-Configurazione: immagine 64×64, K=8 echi (TE = 10..80 ms), 500 epoche PINN,
-seed=0, device **CPU**. Numeri reali da una corsa di `scripts/evaluate.py`.
+Configuration: 64×64 image, K=8 echoes (TE = 10..80 ms), 500 PINN epochs,
+seed=0, device **CPU**. Actual numbers from one run of `scripts/evaluate.py`.
 
-| sigma rumore | MAE T2 PINN (ms) | MAE T2 LS (ms) | RMSE PINN (ms) | RMSE LS (ms) | tempo PINN (s) | tempo LS (s) |
+| noise sigma | T2 MAE PINN (ms) | T2 MAE LS (ms) | RMSE PINN (ms) | RMSE LS (ms) | time PINN (s) | time LS (s) |
 |---|---|---|---|---|---|---|
 | 1.0 | 2.51 | **1.31** | 5.56 | **1.86** | 11.8 | 7.2 |
 | 3.0 | 4.59 | **3.96** | 6.88 | **5.70** | 24.5 | 34.8 |
 | 6.0 | **8.02** | 8.18 | **10.84** | 12.46 | 25.6 | 12.4 |
 <!-- RESULTS_TABLE_END -->
 
-Lettura onesta dei risultati:
-- A **basso rumore** il fitting least-squares per-pixel è più accurato (è il
-  riferimento ottimo quando il modello è esatto e il rumore basso): MAE 1.31 vs
+Reading the numbers:
+- At **low noise**, per-pixel least-squares fitting is more accurate (it is the
+  optimal reference when the model is exact and the noise is low): MAE 1.31 vs
   2.51 ms.
-- All'aumentare del rumore i due metodi si avvicinano e a **sigma alto** la PINN
-  diventa competitiva o migliore in RMSE (10.84 vs 12.46 ms a sigma=6),
-  beneficiando dell'implicita regolarizzazione data dalla rete condivisa tra
-  pixel.
-- I tempi sono dello stesso ordine su CPU; la PINN processa tutti i pixel in
-  batch in un singolo forward, mentre l'LS esegue un'ottimizzazione indipendente
-  per pixel (il costo LS dipende fortemente dalle iterazioni di convergenza).
+- As the noise increases, the two methods get closer, and at **high sigma** the
+  PINN becomes competitive or better in RMSE (10.84 vs 12.46 ms at sigma=6),
+  benefiting from the implicit regularisation given by the network shared across
+  pixels.
+- Run times are of the same order on CPU; the PINN processes all pixels in a
+  batch in a single forward pass, while LS runs an independent optimisation per
+  pixel (the LS cost depends strongly on the number of iterations to converge).
 
-Interpretazione: la PINN ottiene una mappa T2 con errore confrontabile (e più
-robusto al rumore grazie alla regolarizzazione) rispetto al fitting per-pixel ai
-minimi quadrati, processando tutti i pixel in un singolo forward batch.
+Interpretation: the PINN produces a T2 map with an error comparable to (and, thanks
+to the regularisation, more robust to noise than) per-pixel least-squares fitting,
+processing all pixels in a single batched forward pass.
 
-La selezione del metodo migliore a un dato livello di rumore è programmatica:
-`best_model({"pinn": m_pinn, "ls": m_ls}, key="rmse")` restituisce il nome del
-modello con RMSE minore, mentre `rank_models(...)` ne fornisce la classifica
-completa (utile per riepiloghi automatici e regressioni sui risultati).
+Selecting the best method at a given noise level is done in code:
+`best_model({"pinn": m_pinn, "ls": m_ls}, key="rmse")` returns the name of the
+model with the lowest RMSE, while `rank_models(...)` returns the full ranking
+(useful for automatic summaries and regression checks on the results).
 
-## Track dati reali (OpenNeuro ds007116, CC0)
+## Real-data track (OpenNeuro ds007116, CC0)
 
-Oltre al track sintetico, il progetto applica la stessa inversione a **dati
-multi-echo GRE reali** (OpenNeuro **ds007116** "Penn LEAD", licenza CC0; 4 echi
-TE = 7.5/15/22.5/30 ms, 3T). Qui **non esiste ground truth**: la validazione è una
-**held-out echo cross-validation** (si stima `(S0, T2*)` da `K−1` echi e si predice
-l'eco escluso, NRMSE entro la brain mask). In una sequenza GRE il parametro è **T2\***.
+Besides the synthetic track, the project applies the same inversion to **real
+multi-echo GRE data** (OpenNeuro **ds007116** "Penn LEAD", CC0 license; 4 echoes,
+TE = 7.5/15/22.5/30 ms, 3T). Here there is **no ground truth**: validation is a
+**held-out echo cross-validation** (`(S0, T2*)` is estimated from `K−1` echoes and the
+left-out echo is predicted; NRMSE within the brain mask). In a GRE sequence the
+parameter is **T2\***.
 
 ```bash
-uv run python scripts/download_real.py      # ~7 MB da S3 (dati gitignorati)
+uv run python scripts/download_real.py      # ~7 MB from S3 (data gitignored)
 uv run python scripts/evaluate_real.py      # PINN vs LS + held-out CV → results/
 ```
 
-Numeri reali da `results/real_metrics.json` (slice 46, 9706 voxel in mask):
+Actual numbers from `results/real_metrics.json` (slice 46, 9706 voxels in the mask):
 
-| Metodo | T2\* mediano (ms) | NRMSE held-out (media) |
+| Method | Median T2\* (ms) | Held-out NRMSE (mean) |
 |---|---|---|
-| PINN | **50.4** (IQR 39–58) | **0.075** |
+| PINN | **50.4** (IQR 39–59) | **0.075** |
 | Least-squares | 51.8 (IQR 38–63) | 0.100 |
 
-Entrambi danno T2\* fisiologici a 3T; la PINN, grazie alla regolarizzazione implicita
-della rete condivisa, **generalizza meglio sull'eco escluso** (0.075 vs 0.100). Report
-completo con citazioni: [`report/qmri_real_data.md`](report/qmri_real_data.md).
+Both give physiological T2\* values at 3T; the PINN, thanks to the implicit
+regularisation of the shared network, **generalises better to the left-out echo**
+(0.075 vs 0.100). Full report with references:
+[`report/qmri_real_data.md`](report/qmri_real_data.md).
 
-> Nota metodologica (debugging documentato): applicando la PINN sintetica al reale, il
-> T2\* collassava a ~600 ms perché i voxel di background (primo eco ≈ 0) producevano
-> normalizzazioni esplosive che dominavano la loss. Fix: addestrare la PINN **solo entro
-> la brain mask** (`train_pinn(..., mask=...)`), con test di regressione.
+> Methodological note (documented debugging): when the synthetic PINN was applied to
+> the real data, T2\* collapsed to ~600 ms because background voxels (first echo ≈ 0)
+> produced exploding normalisations that dominated the loss. Fix: train the PINN
+> **only within the brain mask** (`train_pinn(..., mask=...)`), with a regression test.
 
-## Note metodologiche e limiti
+## Methodological notes and limitations
 
-- Modello mono-esponenziale: in tessuti reali T2 può essere multi-componente.
-- Dati sintetici: nessun artefatto di acquisizione reale (moto, B1, ecc.).
-- La PINN è qui un **regressore per-pixel** vincolato dalla fisica; non sfrutta
-  ancora correlazioni spaziali profonde (oltre al prior TV opzionale).
+- Mono-exponential model: in real tissue T2 can be multi-component.
+- Synthetic track: no real acquisition artefacts (motion, B1, etc.).
+- The PINN here is a **per-pixel regressor** constrained by physics; it does not
+  yet exploit deep spatial correlations (beyond the optional TV prior).
 
-## Riferimenti
+## References
 
 - M. Raissi, P. Perdikaris, G.E. Karniadakis, *Physics-informed neural networks:
   A deep learning framework for solving forward and inverse problems involving
   nonlinear partial differential equations*, Journal of Computational Physics 378
   (2019) 686–707. DOI: [10.1016/j.jcp.2018.10.045](https://doi.org/10.1016/j.jcp.2018.10.045)
 
-## Licenza
+## Data and licenses
 
-Codice rilasciato sotto licenza MIT (vedi `LICENSE`). I dataset eventualmente
-utilizzati restano soggetti alle rispettive licenze; qui i dati sono interamente
-sintetici e generati dal codice.
+- **Synthetic data**: generated by the code (`src/pinn_qmri/synth.py`,
+  `scripts/download_data.py`); nothing is downloaded for the synthetic track.
+- **Real data**: multi-echo GRE brain MRI from OpenNeuro
+  [ds007116](https://openneuro.org/datasets/ds007116) ("Penn LEAD"), released under
+  **CC0**. The files are downloaded by `scripts/download_real.py` into `data/real/`
+  and are **not committed** to this repository.
+- Only derived results (figures and metrics JSON in `results/`) are committed.
+
+## License
+
+The code is released under the MIT license (see `LICENSE`). Third-party datasets
+remain subject to their own licenses (see [Data and licenses](#data-and-licenses)).

@@ -1,9 +1,9 @@
-"""Generazione di immagini sintetiche con mappe S0, T2 ground-truth e rumore.
+"""Generation of synthetic images with ground-truth S0, T2 maps and noise.
 
-Si costruisce una mappa 2D in cui ogni pixel ha valori (S0, T2) spazialmente
-variabili e regioni distinte (sfondo + alcune "lesioni" / tessuti con T2 diverso).
-Da queste mappe si simulano K immagini a tempi di eco TE diversi tramite il
-forward model fisico, aggiungendo rumore gaussiano oppure riciano.
+A 2D map is built in which every pixel has spatially varying (S0, T2) values
+and distinct regions (background + a few "lesions" / tissues with different T2).
+From these maps, K images at different echo times TE are simulated with the
+physical forward model, and Gaussian or Rician noise is added.
 """
 
 from __future__ import annotations
@@ -17,15 +17,15 @@ from .physics import default_te, signal_numpy
 
 @dataclass
 class SynthData:
-    """Contenitore del dataset sintetico.
+    """Container for the synthetic dataset.
 
-    Attributi:
-        te:        (K,) tempi di eco (ms).
-        signals:   (H, W, K) immagini multi-eco rumorose.
-        s0_true:   (H, W) mappa ground-truth di S0.
-        t2_true:   (H, W) mappa ground-truth di T2 (ms).
-        noise_sigma: deviazione standard del rumore usata.
-        noise_type:  "gaussian" oppure "rician".
+    Attributes:
+        te:        (K,) echo times (ms).
+        signals:   (H, W, K) noisy multi-echo images.
+        s0_true:   (H, W) ground-truth S0 map.
+        t2_true:   (H, W) ground-truth T2 map (ms).
+        noise_sigma: standard deviation of the noise used.
+        noise_type:  "gaussian" or "rician".
     """
 
     te: np.ndarray
@@ -37,33 +37,33 @@ class SynthData:
 
 
 def _disk(h: int, w: int, cy: float, cx: float, r: float) -> np.ndarray:
-    """Maschera booleana di un disco di raggio r centrato in (cy, cx)."""
+    """Boolean mask of a disk of radius r centred at (cy, cx)."""
     yy, xx = np.mgrid[0:h, 0:w]
     return (yy - cy) ** 2 + (xx - cx) ** 2 <= r**2
 
 
 def make_ground_truth(height: int = 64, width: int = 64) -> tuple[np.ndarray, np.ndarray]:
-    """Crea mappe ground-truth (S0, T2) spazialmente variabili.
+    """Create spatially varying ground-truth (S0, T2) maps.
 
-    Lo sfondo ha un gradiente dolce di T2; vengono sovrapposti dischi con T2
-    distinti (es. tessuti/lesioni). S0 ha un gradiente indipendente.
+    The background has a smooth T2 gradient; disks with distinct T2 values
+    (e.g. tissues/lesions) are overlaid. S0 has an independent gradient.
 
     Returns:
-        (s0_true, t2_true) entrambi con shape (height, width). T2 in ms.
+        (s0_true, t2_true), both with shape (height, width). T2 in ms.
     """
     yy, xx = np.mgrid[0:height, 0:width].astype(np.float64)
     yn = yy / max(height - 1, 1)
     xn = xx / max(width - 1, 1)
 
-    # T2 di base: gradiente dolce 40..90 ms
+    # Base T2: smooth gradient 40..90 ms
     t2 = 40.0 + 50.0 * (0.5 * yn + 0.5 * xn)
 
-    # Regioni con T2 distinti (centro/raggi scelti relativamente alle dimensioni)
+    # Regions with distinct T2 (centre/radii chosen relative to the image size)
     t2[_disk(height, width, height * 0.30, width * 0.35, min(height, width) * 0.14)] = 120.0
     t2[_disk(height, width, height * 0.68, width * 0.65, min(height, width) * 0.11)] = 25.0
     t2[_disk(height, width, height * 0.55, width * 0.25, min(height, width) * 0.08)] = 160.0
 
-    # S0: gradiente indipendente 80..120 (unita' arbitrarie)
+    # S0: independent gradient 80..120 (arbitrary units)
     s0 = 80.0 + 40.0 * (1.0 - yn) * (0.5 + 0.5 * xn)
 
     return s0.astype(np.float64), t2.astype(np.float64)
@@ -75,16 +75,16 @@ def add_noise(
     noise_type: str = "gaussian",
     rng: np.random.Generator | None = None,
 ) -> np.ndarray:
-    """Aggiunge rumore ai segnali puliti.
+    """Add noise to the clean signals.
 
     Args:
-        clean:      segnali senza rumore, shape qualsiasi.
-        sigma:      deviazione standard del rumore (stesse unita' del segnale).
-        noise_type: "gaussian" o "rician".
-        rng:        generatore numpy opzionale (per riproducibilita').
+        clean:      noise-free signals, any shape.
+        sigma:      noise standard deviation (same units as the signal).
+        noise_type: "gaussian" or "rician".
+        rng:        optional numpy generator (for reproducibility).
 
     Returns:
-        Segnali rumorosi, stessa shape di clean.
+        Noisy signals, same shape as clean.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -93,11 +93,11 @@ def add_noise(
     if noise_type == "gaussian":
         return clean + rng.normal(0.0, sigma, size=clean.shape)
     if noise_type == "rician":
-        # Rumore riciano: magnitudine di due canali gaussiani indipendenti.
+        # Rician noise: magnitude of two independent Gaussian channels.
         real = clean + rng.normal(0.0, sigma, size=clean.shape)
         imag = rng.normal(0.0, sigma, size=clean.shape)
         return np.sqrt(real**2 + imag**2)
-    raise ValueError(f"noise_type sconosciuto: {noise_type!r}")
+    raise ValueError(f"unknown noise_type: {noise_type!r}")
 
 
 def generate(
@@ -110,18 +110,18 @@ def generate(
     noise_type: str = "gaussian",
     seed: int = 0,
 ) -> SynthData:
-    """Genera un dataset sintetico completo e riproducibile.
+    """Generate a complete, reproducible synthetic dataset.
 
     Args:
-        height, width: dimensioni dell'immagine.
-        num_echoes:    numero K di tempi di eco.
-        te_min, te_max: estremi dei TE (ms).
-        noise_sigma:   sigma del rumore.
-        noise_type:    "gaussian" o "rician".
-        seed:          seme per la riproducibilita'.
+        height, width: image size.
+        num_echoes:    number K of echo times.
+        te_min, te_max: TE range limits (ms).
+        noise_sigma:   noise sigma.
+        noise_type:    "gaussian" or "rician".
+        seed:          seed for reproducibility.
 
     Returns:
-        Un oggetto SynthData.
+        A SynthData object.
     """
     rng = np.random.default_rng(seed)
     te = default_te(num_echoes, te_min, te_max)

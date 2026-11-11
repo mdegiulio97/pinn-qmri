@@ -1,11 +1,11 @@
-"""Loop di training non supervisionato della PINN con physics loss.
+"""Unsupervised PINN training loop with a physics loss.
 
-La loss principale e' la consistenza fisica:
-    L_phys = mean( || S0*exp(-TE/T2) - segnali_misurati ||^2 )
-Opzionalmente si aggiunge un prior di smoothness Total-Variation sulle mappe
-predette (utile a rumore elevato).
+The main loss is physical consistency:
+    L_phys = mean( || S0*exp(-TE/T2) - measured_signals ||^2 )
+Optionally, a Total-Variation smoothness prior on the predicted maps is added
+(useful at high noise).
 
-Il training e' interamente self-supervised: la ground-truth NON viene mai usata.
+Training is fully self-supervised: the ground truth is NEVER used.
 """
 
 from __future__ import annotations
@@ -22,16 +22,16 @@ from .physics import signal_torch
 
 @dataclass
 class TrainConfig:
-    """Iperparametri del training.
+    """Training hyperparameters.
 
-    Attributi:
-        epochs:     numero di epoche (full-batch su tutti i pixel).
-        lr:         learning rate Adam.
-        hidden:     larghezza hidden della rete.
-        depth:      numero di strati nascosti.
-        lambda_tv:  peso del prior Total-Variation (0 = disattivato).
-        seed:       seme per riproducibilita'.
-        verbose:    se True stampa la loss periodicamente.
+    Attributes:
+        epochs:     number of epochs (full batch over all pixels).
+        lr:         Adam learning rate.
+        hidden:     hidden width of the network.
+        depth:      number of hidden layers.
+        lambda_tv:  weight of the Total-Variation prior (0 = disabled).
+        seed:       seed for reproducibility.
+        verbose:    if True, print the loss periodically.
     """
 
     epochs: int = 400
@@ -44,7 +44,7 @@ class TrainConfig:
 
 
 def _tv_loss(maps: torch.Tensor) -> torch.Tensor:
-    """Total Variation 2D (anisotropa) di una mappa (H, W)."""
+    """2D (anisotropic) Total Variation of a map (H, W)."""
     dh = torch.abs(maps[1:, :] - maps[:-1, :]).mean()
     dw = torch.abs(maps[:, 1:] - maps[:, :-1]).mean()
     return dh + dw
@@ -57,22 +57,22 @@ def train_pinn(
     device: torch.device | None = None,
     mask: np.ndarray | None = None,
 ) -> tuple[PINN, np.ndarray, np.ndarray, list[float]]:
-    """Addestra la PINN sui segnali e restituisce le mappe stimate.
+    """Train the PINN on the signals and return the estimated maps.
 
     Args:
-        signals: (H, W, K) immagini multi-eco rumorose.
-        te:      (K,) tempi di eco (ms).
-        config:  iperparametri (TrainConfig).
-        device:  device torch; se None usa get_device().
-        mask:    (H, W) booleana opzionale. Se fornita, la rete e' addestrata SOLO
-                 sui voxel in mask: indispensabile sui dati reali, dove i voxel di
-                 background (primo eco ~0) producono normalizzazioni esplosive che
-                 altrimenti collassano la rete a un T2 costante. Con mask, il prior
-                 Total-Variation e' disattivato e le mappe restituite sono azzerate
-                 fuori dalla mask. Default None = comportamento invariato.
+        signals: (H, W, K) noisy multi-echo images.
+        te:      (K,) echo times (ms).
+        config:  hyperparameters (TrainConfig).
+        device:  torch device; if None, get_device() is used.
+        mask:    optional boolean (H, W). If given, the network is trained ONLY
+                 on the voxels inside the mask: this is required on real data, where
+                 background voxels (first echo ~0) produce exploding normalisations
+                 that otherwise collapse the network to a constant T2. With a mask,
+                 the Total-Variation prior is disabled and the returned maps are set
+                 to zero outside the mask. Default None = unchanged behaviour.
 
     Returns:
-        (modello, s0_pred (H,W), t2_pred (H,W), storia_loss).
+        (model, s0_pred (H,W), t2_pred (H,W), loss_history).
     """
     if config is None:
         config = TrainConfig()
@@ -85,25 +85,25 @@ def train_pinn(
     h, w, k = signals.shape
     x_np = signals.reshape(-1, k).astype(np.float32)  # (N, K)
 
-    # Normalizzazione per-pixel: si divide il vettore di segnali per l'ampiezza del
-    # primo eco. Cosi' l'input alla rete e' adimensionale e ben condizionato, la
-    # physics loss e' calcolata in scala normalizzata (S0_norm ~ 1) e T2 - essendo
-    # invariante di scala - viene predetto direttamente in millisecondi.
-    # Il fattore di scala riporta S0 alla scala fisica originale a posteriori.
-    scale = np.maximum(np.abs(x_np[:, :1]), 1e-6)  # (N,1) ~ ampiezza primo eco
+    # Per-pixel normalisation: the signal vector is divided by the amplitude of the
+    # first echo. This makes the network input dimensionless and well conditioned,
+    # the physics loss is computed on the normalised scale (S0_norm ~ 1) and T2,
+    # being scale invariant, is predicted directly in milliseconds.
+    # The scale factor brings S0 back to the original physical scale afterwards.
+    scale = np.maximum(np.abs(x_np[:, :1]), 1e-6)  # (N,1) ~ first-echo amplitude
     x_norm = (x_np / scale).astype(np.float32)
 
     x = torch.from_numpy(x_norm).to(device)
-    target_norm = torch.from_numpy(x_norm).to(device)  # target in scala normalizzata
+    target_norm = torch.from_numpy(x_norm).to(device)  # target on the normalised scale
     scale_t = torch.from_numpy(scale.astype(np.float32)).to(device).squeeze(1)  # (N,)
     te_t = torch.from_numpy(te.astype(np.float32)).to(device)
 
-    # In scala normalizzata S0 e' ~1; uso s0_scale=2 per non forzare valori troppo alti.
+    # On the normalised scale S0 is ~1; s0_scale=2 avoids forcing values that are too high.
     model = PINN(num_echoes=k, hidden=config.hidden, depth=config.depth, s0_scale=2.0).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
     mse = nn.MSELoss()
 
-    # Sottoinsieme di training: tutti i voxel, oppure solo quelli in mask.
+    # Training subset: all voxels, or only those inside the mask.
     if mask is not None:
         idx = torch.from_numpy(np.flatnonzero(np.asarray(mask, dtype=bool).reshape(-1))).to(device)
         x_tr = x[idx]
@@ -116,11 +116,11 @@ def train_pinn(
     for epoch in range(config.epochs):
         optimizer.zero_grad()
         s0_norm, t2 = model(x_tr)
-        recon = signal_torch(te_t, s0_norm, t2)  # (N_tr, K) in scala normalizzata
+        recon = signal_torch(te_t, s0_norm, t2)  # (N_tr, K) on the normalised scale
         loss = mse(recon, target_tr)
 
-        # Il prior Total-Variation richiede la griglia (H,W) completa: applicabile
-        # solo quando si addestra su tutta la slice (mask is None).
+        # The Total-Variation prior needs the full (H,W) grid: it applies only
+        # when training on the whole slice (mask is None).
         if config.lambda_tv > 0 and mask is None:
             t2_map = t2.reshape(h, w)
             loss = loss + config.lambda_tv * _tv_loss(t2_map)

@@ -1,10 +1,10 @@
-"""Test delle funzioni di ranking/selezione dei modelli (offline, senza rete)."""
+"""Tests of the model ranking/selection functions (offline, no network)."""
 
 import pytest
 
 from pinn_qmri.metrics import best_model, rank_models
 
-# Metriche fittizie: due modelli con errori (RMSE/MAE) e uno score R^2.
+# Dummy metrics: three models with errors (RMSE/MAE) and an R^2 score.
 METRICS = {
     "pinn": {"rmse": 5.5, "mae": 2.5, "r2": 0.90},
     "ls": {"rmse": 1.8, "mae": 1.3, "r2": 0.95},
@@ -31,7 +31,7 @@ def test_rank_models_empty_returns_empty_list():
 def test_rank_models_stable_on_ties():
     tied = {"a": {"rmse": 2.0}, "b": {"rmse": 2.0}, "c": {"rmse": 1.0}}
     ranking = rank_models(tied, key="rmse", lower_is_better=True)
-    # 'c' e' il migliore; a parita' l'ordine di inserimento e' preservato.
+    # 'c' is the best; ties keep insertion order.
     assert [name for name, _ in ranking] == ["c", "a", "b"]
 
 

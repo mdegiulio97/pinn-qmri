@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Michele De Giulio
+Copyright (c) 2026 Michele Maria De Giulio
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,9 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-Nota: la licenza MIT copre il codice sorgente di questo progetto. I dataset
-eventualmente utilizzati restano soggetti alle proprie licenze. In questo
-progetto i dati sono interamente sintetici e generati dal codice.
