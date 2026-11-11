@@ -1,9 +1,9 @@
-"""Test offline del track dati reali (nessun download).
+"""Offline tests of the real-data track (no download).
 
-Si costruisce un piccolo NIfTI multi-eco SINTETICO con (S0, T2*) noti, scritto in
-una directory temporanea, e si verifica che: il parsing dei TE dai sidecar BIDS
-funzioni, il loader restituisca forme coerenti e una mask non vuota, e la
-held-out echo cross-validation su un modello esatto dia NRMSE piccolo.
+A small SYNTHETIC multi-echo NIfTI with known (S0, T2*) is written to a temporary
+directory, and the tests check that: TE parsing from the BIDS sidecars works, the
+loader returns consistent shapes and a non-empty mask, and the held-out echo
+cross-validation on an exact model gives a small NRMSE.
 """
 
 from __future__ import annotations
@@ -26,11 +26,11 @@ TE_MS = [7.5, 15.0, 22.5, 30.0]
 
 
 def _write_synthetic_megre(tmp_path, te_ms=TE_MS, shape=(10, 10, 3)):
-    """Scrive K NIfTI 3D (un eco ciascuno) + sidecar JSON con EchoTime (s)."""
+    """Write K 3D NIfTI files (one echo each) + JSON sidecars with EchoTime (s)."""
     rng = np.random.default_rng(0)
     s0 = rng.uniform(80.0, 120.0, size=shape)
     t2 = rng.uniform(30.0, 60.0, size=shape)
-    # Bordo a zero per simulare il background (separabile da Otsu).
+    # Zero border to simulate the background (separable by Otsu).
     s0[0, :, :] = s0[-1, :, :] = s0[:, 0, :] = s0[:, -1, :] = 0.0
     te = np.asarray(te_ms, dtype=np.float64)
     signal = s0[..., None] * np.exp(-te / np.maximum(t2, 1e-6)[..., None])  # (X,Y,Z,K)
@@ -41,7 +41,7 @@ def _write_synthetic_megre(tmp_path, te_ms=TE_MS, shape=(10, 10, 3)):
         npath = tmp_path / f"echo-{k + 1}_part-mag_MEGRE.nii.gz"
         nib.save(nib.Nifti1Image(signal[..., k].astype(np.float32), affine), npath)
         jpath = tmp_path / f"echo-{k + 1}_part-mag_MEGRE.json"
-        jpath.write_text(json.dumps({"EchoTime": t / 1000.0}))  # BIDS: secondi
+        jpath.write_text(json.dumps({"EchoTime": t / 1000.0}))  # BIDS: seconds
         nii_paths.append(npath)
         json_paths.append(jpath)
     return nii_paths, json_paths
@@ -58,9 +58,9 @@ def test_load_megre_shapes_and_mask(tmp_path):
     megre = load_megre(nii_paths, json_paths)
     h, w, k = megre.signals.shape
     assert k == len(TE_MS)
-    assert megre.signals.ndim == 3  # slice 2D x K echi
+    assert megre.signals.ndim == 3  # 2D slice x K echoes
     assert megre.mask.shape == (h, w)
-    assert megre.mask.sum() > 0  # mask non vuota
+    assert megre.mask.sum() > 0  # non-empty mask
     assert np.allclose(megre.te_ms, TE_MS)
 
 
@@ -69,7 +69,7 @@ def test_otsu_mask_separates_foreground(tmp_path):
     echo1 = np.asanyarray(nib.load(str(nii_paths[0])).dataobj)[:, :, 1]
     mask = otsu_mask(echo1)
     assert mask.dtype == bool
-    assert 0 < mask.sum() < mask.size  # separa, non prende tutto
+    assert 0 < mask.sum() < mask.size  # separates, does not take everything
 
 
 def test_heldout_cv_small_nrmse_on_exact_model(tmp_path):
@@ -81,7 +81,7 @@ def test_heldout_cv_small_nrmse_on_exact_model(tmp_path):
 
     out = heldout_echo_cv(megre.signals, megre.te_ms, ls_fit, megre.mask)
     assert len(out["per_fold"]) == len(TE_MS)
-    # Il modello e' esatto (dati senza rumore): il residuo deve essere piccolo.
+    # The model is exact (noise-free data): the residual must be small.
     assert out["mean"] < 0.02
 
 
@@ -92,9 +92,9 @@ def test_nrmse_zero_when_identical():
 
 
 def test_pinn_with_mask_ignores_garbage_background():
-    """Su dato reale il background (primo eco ~0) produce normalizzazioni esplosive
-    che, addestrando su tutta la slice, collassano la rete a un T2 costante alto.
-    Allenando SOLO entro la mask la PINN recupera il T2* corretto del tessuto."""
+    """On real data the background (first echo ~0) produces exploding normalisations
+    that, when training on the whole slice, collapse the network to a high constant T2.
+    Training ONLY within the mask lets the PINN recover the correct tissue T2*."""
     from pinn_qmri.train import TrainConfig, train_pinn
 
     h, w = 16, 16
@@ -107,7 +107,7 @@ def test_pinn_with_mask_ignores_garbage_background():
     s0[brain] = 100.0
     signals = s0[..., None] * np.exp(-te / np.maximum(t2, 1e-6)[..., None])  # (H,W,K)
 
-    # Background: primo eco quasi-zero + echi successivi rumorosi -> rapporti esplosivi.
+    # Background: near-zero first echo + noisy later echoes -> exploding ratios.
     rng = np.random.default_rng(0)
     bg = ~brain
     signals[bg, 0] = 1e-3

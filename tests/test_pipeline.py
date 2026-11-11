@@ -1,4 +1,4 @@
-"""Test end-to-end della pipeline su immagini piccole e poche epoche (offline, cpu)."""
+"""End-to-end pipeline tests on small images with few epochs (offline, cpu)."""
 
 import numpy as np
 
@@ -18,7 +18,7 @@ def test_synth_shapes_and_groundtruth():
 
 
 def test_baseline_recovers_t2_noiseless():
-    # Senza rumore il fitting LS deve recuperare T2 quasi esattamente.
+    # Without noise the LS fit must recover T2 almost exactly.
     te = default_te(8)
     y = signal_numpy(te, np.array(100.0), np.array(55.0))
     s0, t2 = fit_pixel(te, y)
@@ -36,11 +36,11 @@ def test_pinn_trains_and_reduces_loss():
     data = generate(height=16, width=16, num_echoes=8, noise_sigma=1.0, seed=3)
     cfg = TrainConfig(epochs=150, seed=3, hidden=32, depth=2)
     _, _, t2_pinn, history = train_pinn(data.signals, data.te, cfg, device=None)
-    # La loss deve diminuire e la mappa T2 avere forma corretta e valori positivi.
+    # The loss must decrease and the T2 map must have the right shape and positive values.
     assert history[-1] < history[0]
     assert t2_pinn.shape == data.t2_true.shape
     assert np.all(t2_pinn > 0)
-    # Errore ragionevole su immagine piccola e poche epoche (soglia generosa).
+    # Reasonable error on a small image with few epochs (generous threshold).
     assert mae(t2_pinn, data.t2_true) < 40.0
 
 

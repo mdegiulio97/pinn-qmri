@@ -1,11 +1,11 @@
-"""Rete PINN per la stima per-pixel di (S0, T2) dai segnali multi-eco.
+"""PINN for per-pixel estimation of (S0, T2) from multi-echo signals.
 
-La rete e' un semplice MLP che mappa il vettore dei K segnali di un pixel ->
-2 valori positivi (S0, T2). La positivita' e' garantita da una Softplus in uscita.
+The network is a simple MLP that maps the vector of K signals of a pixel ->
+2 positive values (S0, T2). Positivity is enforced by a Softplus at the output.
 
-L'aspetto "physics-informed" NON sta nell'architettura ma nella loss
-(vedi train.py): la rete non vede mai la ground-truth, viene addestrata solo
-imponendo la coerenza con il forward model S(TE)=S0*exp(-TE/T2).
+The "physics-informed" part is NOT in the architecture but in the loss
+(see train.py): the network never sees the ground truth, it is trained only
+by enforcing consistency with the forward model S(TE)=S0*exp(-TE/T2).
 """
 
 from __future__ import annotations
@@ -15,19 +15,19 @@ from torch import nn
 
 
 def get_device() -> torch.device:
-    """Device auto-detect: cuda se disponibile, altrimenti cpu."""
+    """Device auto-detection: cuda if available, otherwise cpu."""
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class PINN(nn.Module):
-    """MLP per-pixel: input (K segnali) -> output (S0, T2), entrambi positivi.
+    """Per-pixel MLP: input (K signals) -> output (S0, T2), both positive.
 
     Args:
-        num_echoes: numero K di echi in ingresso.
-        hidden:     larghezza degli strati nascosti.
-        depth:      numero di strati nascosti.
-        s0_scale:   scala iniziale di S0 (per ben condizionare l'output).
-        t2_scale:   scala iniziale di T2 in ms.
+        num_echoes: number K of input echoes.
+        hidden:     width of the hidden layers.
+        depth:      number of hidden layers.
+        s0_scale:   initial scale of S0 (to keep the output well conditioned).
+        t2_scale:   initial scale of T2 in ms.
     """
 
     def __init__(
@@ -48,13 +48,13 @@ class PINN(nn.Module):
         self.register_buffer("scale", torch.tensor([s0_scale, t2_scale], dtype=torch.float32))
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Predice (S0, T2) positivi.
+        """Predict positive (S0, T2).
 
         Args:
-            x: (N, K) segnali normalizzati (o grezzi) per N pixel.
+            x: (N, K) normalised (or raw) signals for N pixels.
 
         Returns:
-            (s0, t2): due tensori (N,) strettamente positivi.
+            (s0, t2): two strictly positive (N,) tensors.
         """
         raw = self.net(x)
         pos = self.softplus(raw) * self.scale

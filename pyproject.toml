@@ -1,7 +1,7 @@
 [project]
 name = "pinn-qmri"
 version = "0.1.0"
-description = "Physics-Informed Neural Network per la stima di parametri quantitativi MRI (rilassometria T2) su dati sintetici, con baseline least-squares per-pixel"
+description = "Physics-informed neural network for quantitative MRI parameter estimation (T2/T2* relaxometry) on synthetic and real data, with a per-pixel least-squares baseline"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -31,8 +31,8 @@ packages = ["src/pinn_qmri"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-# I notebook usano uno stile a celle (import dopo setup di sys.path, statement
-# compatti con ';' per le figure): esclusi dal lint per non snaturarli.
+# Notebooks use a cell-oriented style (imports after the sys.path setup, compact
+# ';' statements for figures): excluded from lint to keep them as they are.
 extend-exclude = ["notebooks"]
 
 [tool.pytest.ini_options]
