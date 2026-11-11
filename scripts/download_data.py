@@ -1,10 +1,10 @@
-"""Genera e salva il dataset sintetico (idempotente).
+"""Generate and save the synthetic dataset (idempotent).
 
-Non scarica nulla dalla rete: i dati sono interamente generati dal forward model.
-Il file viene salvato in data/synth_dataset.npz. Se esiste gia' ed e' coerente con
-i parametri richiesti, NON viene rigenerato (idempotenza).
+Nothing is downloaded from the network: the data are generated entirely by the
+forward model. The file is saved to data/synth_dataset.npz. If it already exists
+and matches the requested parameters, it is NOT regenerated (idempotent).
 
-Uso:
+Usage:
     uv run python scripts/download_data.py
 """
 
@@ -22,14 +22,14 @@ DATASET_PATH = DATA_DIR / "synth_dataset.npz"
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Genera il dataset sintetico T2 (idempotente).")
+    parser = argparse.ArgumentParser(description="Generate the synthetic T2 dataset (idempotent).")
     parser.add_argument("--height", type=int, default=64)
     parser.add_argument("--width", type=int, default=64)
     parser.add_argument("--num-echoes", type=int, default=8)
     parser.add_argument("--noise-sigma", type=float, default=2.0)
     parser.add_argument("--noise-type", type=str, default="gaussian", choices=["gaussian", "rician"])
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--force", action="store_true", help="rigenera anche se gia' presente")
+    parser.add_argument("--force", action="store_true", help="regenerate even if already present")
     args = parser.parse_args()
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -44,9 +44,9 @@ def main() -> None:
                 and int(d["seed"]) == args.seed
             )
         if same:
-            print(f"[ok] dataset gia' presente e coerente: {DATASET_PATH}")
+            print(f"[ok] dataset already present and up to date: {DATASET_PATH}")
             return
-        print("[info] parametri diversi: rigenero il dataset.")
+        print("[info] parameters differ: regenerating the dataset.")
 
     data = generate(
         height=args.height,
@@ -66,10 +66,10 @@ def main() -> None:
         noise_type=data.noise_type,
         seed=args.seed,
     )
-    print(f"[ok] dataset salvato: {DATASET_PATH}")
+    print(f"[ok] dataset saved: {DATASET_PATH}")
     print(
-        f"     shape segnali={data.signals.shape}, K={len(data.te)}, "
-        f"rumore={data.noise_type} sigma={data.noise_sigma}"
+        f"     signal shape={data.signals.shape}, K={len(data.te)}, "
+        f"noise={data.noise_type} sigma={data.noise_sigma}"
     )
 
 

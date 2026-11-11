@@ -1,12 +1,12 @@
-"""Scarica un soggetto multi-echo GRE reale da OpenNeuro (ds007116, CC0).
+"""Download one real multi-echo GRE subject from OpenNeuro (ds007116, CC0).
 
-Dataset: OpenNeuro ds007116 "Penn LEAD" (licenza CC0). Sequenza MEGRE anatomica,
-4 echi (TE = 7.5/15/22.5/30 ms), 3T. Si scaricano SOLO i 4 file magnitude (+ i
-sidecar JSON) del soggetto di riferimento, dal bucket S3 pubblico. Idempotente:
-i file gia' presenti non vengono ri-scaricati. I dati grezzi NON sono committati
-(cartella data/ gitignorata).
+Dataset: OpenNeuro ds007116 "Penn LEAD" (CC0 license). Anatomical MEGRE sequence,
+4 echoes (TE = 7.5/15/22.5/30 ms), 3T. ONLY the 4 magnitude files (+ the JSON
+sidecars) of the reference subject are downloaded, from the public S3 bucket.
+Idempotent: files already present are not downloaded again. The raw data are NOT
+committed (the data/ folder is gitignored).
 
-Esegui:  uv run python scripts/download_real.py
+Run:  uv run python scripts/download_real.py
 """
 
 from __future__ import annotations
@@ -39,8 +39,8 @@ def _download(url: str, dest: Path) -> None:
 
 def main() -> None:
     DEST.mkdir(parents=True, exist_ok=True)
-    print(f"Dataset: OpenNeuro {ACCESSION} (Penn LEAD) — licenza CC0")
-    print(f"Soggetto: {SUBJECT}/{SESSION}, sequenza MEGRE (solo magnitude)\n")
+    print(f"Dataset: OpenNeuro {ACCESSION} (Penn LEAD) — CC0 license")
+    print(f"Subject: {SUBJECT}/{SESSION}, MEGRE sequence (magnitude only)\n")
     for name in _files():
         dest = DEST / name
         if dest.exists() and dest.stat().st_size > 0:
@@ -49,9 +49,9 @@ def main() -> None:
         url = f"{BASE}/{name}"
         print(f"  [get ] {name}")
         _download(url, dest)
-    print(f"\nScaricati in: {DEST}")
-    print("Citazione: dataset OpenNeuro ds007116 (Penn LEAD), CC0. "
-          "Verificare l'attribuzione richiesta sulla pagina del dataset.")
+    print(f"\nDownloaded to: {DEST}")
+    print("Citation: OpenNeuro dataset ds007116 (Penn LEAD), CC0. "
+          "Check the attribution requested on the dataset page.")
 
 
 if __name__ == "__main__":

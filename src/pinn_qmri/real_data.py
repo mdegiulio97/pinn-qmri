@@ -1,12 +1,12 @@
-"""I/O e preparazione di dati multi-echo GRE REALI per il T2* mapping.
+"""I/O and preparation of REAL multi-echo GRE data for T2* mapping.
 
-A differenza del track sintetico, qui non esiste ground truth. Questo modulo si
-limita a: leggere i tempi di eco dai sidecar BIDS, caricare i NIfTI magnitude dei
-singoli echi, estrarre una slice rappresentativa con una brain mask, e fornire la
-held-out echo cross-validation (validazione GT-free) usata da `evaluate_real.py`.
+Unlike the synthetic track, there is no ground truth here. This module only:
+reads echo times from the BIDS sidecars, loads the magnitude NIfTI files of the
+individual echoes, extracts a representative slice with a brain mask, and provides
+the held-out echo cross-validation (GT-free validation) used by `evaluate_real.py`.
 
-Il forward model fisico e' lo stesso del track sintetico (mono-esponenziale
-`S(TE)=S0*exp(-TE/T2*)`): nel contesto GRE il parametro stimato e' T2*, non T2.
+The physical forward model is the same as in the synthetic track (mono-exponential
+`S(TE)=S0*exp(-TE/T2*)`): in a GRE setting the estimated parameter is T2*, not T2.
 """
 
 from __future__ import annotations
@@ -21,20 +21,20 @@ import numpy as np
 
 from . import physics
 
-# Una funzione di fitting prende (te (K,), signals (H,W,K)) e ritorna (s0_map, t2_map).
+# A fitting function takes (te (K,), signals (H,W,K)) and returns (s0_map, t2_map).
 FitFn = Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
 
 
 @dataclass
 class MEGRE:
-    """Una slice multi-echo GRE pronta per l'inversione.
+    """A multi-echo GRE slice ready for the inversion.
 
-    Attributi:
-        signals:     (H, W, K) segnali magnitude della slice ai K echi.
-        te_ms:       (K,) tempi di eco in millisecondi.
-        mask:        (H, W) brain mask booleana.
-        slice_index: indice della slice estratta lungo l'asse assiale.
-        volume_shape: forma (X, Y, Z) del volume 3D originale.
+    Attributes:
+        signals:     (H, W, K) magnitude signals of the slice at the K echoes.
+        te_ms:       (K,) echo times in milliseconds.
+        mask:        (H, W) boolean brain mask.
+        slice_index: index of the extracted slice along the axial axis.
+        volume_shape: shape (X, Y, Z) of the original 3D volume.
     """
 
     signals: np.ndarray
@@ -45,25 +45,25 @@ class MEGRE:
 
 
 def read_te_from_sidecars(json_paths: list[Path]) -> np.ndarray:
-    """Legge ``EchoTime`` (in secondi, BIDS) dai sidecar e converte in ms.
+    """Read ``EchoTime`` (in seconds, BIDS) from the sidecars and convert to ms.
 
     Args:
-        json_paths: percorsi dei JSON BIDS, uno per eco, nell'ordine degli echi.
+        json_paths: paths of the BIDS JSON files, one per echo, in echo order.
 
     Returns:
-        (K,) tempi di eco in millisecondi.
+        (K,) echo times in milliseconds.
     """
     te_ms: list[float] = []
     for p in json_paths:
         meta = json.loads(Path(p).read_text())
         if "EchoTime" not in meta:
-            raise KeyError(f"'EchoTime' assente nel sidecar {p}")
+            raise KeyError(f"'EchoTime' missing from sidecar {p}")
         te_ms.append(float(meta["EchoTime"]) * 1000.0)
     return np.asarray(te_ms, dtype=np.float64)
 
 
 def otsu_threshold(values: np.ndarray, bins: int = 256) -> float:
-    """Soglia di Otsu (massimizza la varianza inter-classe) su un array 1D/2D."""
+    """Otsu threshold (maximises the between-class variance) on a 1D/2D array."""
     flat = np.asarray(values, dtype=np.float64).ravel()
     finite = flat[np.isfinite(flat)]
     if finite.size == 0 or finite.min() == finite.max():
@@ -85,17 +85,17 @@ def otsu_threshold(values: np.ndarray, bins: int = 256) -> float:
 
 
 def otsu_mask(echo_slice: np.ndarray) -> np.ndarray:
-    """Brain mask booleana da una slice magnitude via soglia di Otsu."""
+    """Boolean brain mask from a magnitude slice via Otsu thresholding."""
     thr = otsu_threshold(echo_slice)
     return np.asarray(echo_slice, dtype=np.float64) > thr
 
 
 def select_slice(volume_4d: np.ndarray, axis: int = 2) -> int:
-    """Indice della slice a massima energia del primo eco lungo ``axis``.
+    """Index of the slice with the highest first-echo energy along ``axis``.
 
     Args:
-        volume_4d: (X, Y, Z, K) volume multi-eco.
-        axis:      asse lungo cui scegliere la slice (default Z=2).
+        volume_4d: (X, Y, Z, K) multi-echo volume.
+        axis:      axis along which the slice is chosen (default Z=2).
     """
     echo0 = volume_4d[..., 0]
     sum_axes = tuple(a for a in range(echo0.ndim) if a != axis)
@@ -109,20 +109,20 @@ def load_megre(
     te_ms: np.ndarray | None = None,
     slice_index: int | None = None,
 ) -> MEGRE:
-    """Carica i NIfTI magnitude dei singoli echi ed estrae una slice + mask.
+    """Load the magnitude NIfTI files of the individual echoes and extract a slice + mask.
 
     Args:
-        nifti_paths: percorsi dei NIfTI 3D, uno per eco, in ordine crescente di TE.
-        json_paths:  sidecar BIDS per leggere i TE (alternativo a ``te_ms``).
-        te_ms:       TE in ms espliciti (ha precedenza se forniti).
-        slice_index: slice assiale da estrarre; se None si sceglie automaticamente.
+        nifti_paths: paths of the 3D NIfTI files, one per echo, in increasing TE order.
+        json_paths:  BIDS sidecars to read the TEs from (alternative to ``te_ms``).
+        te_ms:       explicit TEs in ms (take precedence if given).
+        slice_index: axial slice to extract; if None it is chosen automatically.
 
     Returns:
-        Un oggetto :class:`MEGRE`.
+        A :class:`MEGRE` object.
     """
     if te_ms is None:
         if json_paths is None:
-            raise ValueError("Fornire json_paths oppure te_ms.")
+            raise ValueError("Provide either json_paths or te_ms.")
         te_ms = read_te_from_sidecars(json_paths)
     te_ms = np.asarray(te_ms, dtype=np.float64)
 
@@ -144,7 +144,7 @@ def load_megre(
 
 
 def nrmse(pred: np.ndarray, true: np.ndarray, mask: np.ndarray) -> float:
-    """RMSE normalizzato (per la media del segnale vero) entro la mask."""
+    """RMSE normalised by the mean of the true signal, within the mask."""
     m = np.asarray(mask, dtype=bool)
     if m.sum() == 0:
         return float("nan")
@@ -160,17 +160,17 @@ def heldout_echo_cv(
     fit_fn: FitFn,
     mask: np.ndarray,
 ) -> dict:
-    """Leave-one-echo-out cross-validation (validazione senza ground truth).
+    """Leave-one-echo-out cross-validation (validation without ground truth).
 
-    Per ogni eco ``j`` si stima ``(S0, T2*)`` dagli altri ``K-1`` echi e si predice
-    l'eco escluso; il residuo (NRMSE entro la mask) misura la coerenza fisica
-    dell'inversione senza alcuna ground truth.
+    For each echo ``j``, ``(S0, T2*)`` is estimated from the other ``K-1`` echoes
+    and the left-out echo is predicted; the residual (NRMSE within the mask)
+    measures the physical consistency of the inversion without any ground truth.
 
     Args:
-        signals: (H, W, K) segnali della slice.
-        te_ms:   (K,) tempi di eco in ms.
-        fit_fn:  funzione (te, signals) -> (s0_map, t2_map).
-        mask:    (H, W) brain mask booleana.
+        signals: (H, W, K) signals of the slice.
+        te_ms:   (K,) echo times in ms.
+        fit_fn:  function (te, signals) -> (s0_map, t2_map).
+        mask:    (H, W) boolean brain mask.
 
     Returns:
         ``{"per_fold": [nrmse_0, ...], "mean": float}``.

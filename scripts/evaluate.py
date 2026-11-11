@@ -1,16 +1,16 @@
-"""Confronto PINN vs least-squares su piu' livelli di rumore.
+"""PINN vs least-squares comparison over several noise levels.
 
-Per ogni livello di rumore:
-- genera dati sintetici con ground-truth nota,
-- stima la mappa T2 con la PINN (non supervisionata) e con il fitting LS per-pixel,
-- calcola MAE/RMSE/MAPE su T2 e i tempi di esecuzione.
+For each noise level:
+- generate synthetic data with known ground truth,
+- estimate the T2 map with the (unsupervised) PINN and with per-pixel LS fitting,
+- compute MAE/RMSE/MAPE on T2 and the run times.
 
-Produce:
+Outputs:
 - results/metrics.json
-- results/maps_comparison.png   (mappe T2: GT, PINN, LS al rumore intermedio)
-- results/mae_vs_noise.png      (MAE T2 vs sigma per PINN e LS)
+- results/maps_comparison.png   (T2 maps: GT, PINN, LS at the middle noise level)
+- results/mae_vs_noise.png      (T2 MAE vs sigma for PINN and LS)
 
-Uso:
+Usage:
     uv run python scripts/evaluate.py
 """
 
@@ -58,7 +58,7 @@ def run(
         "per_noise": [],
     }
 
-    maps_for_plot = None  # (sigma, gt, pinn, ls) al livello intermedio
+    maps_for_plot = None  # (sigma, gt, pinn, ls) at the middle level
     mid_idx = len(noise_sigmas) // 2
 
     for idx, sigma in enumerate(noise_sigmas):
@@ -114,12 +114,12 @@ def _plot_maps(maps) -> None:
         ax.set_title(title)
         ax.axis("off")
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="ms")
-    fig.suptitle(f"Mappe T2 a sigma={sigma}")
+    fig.suptitle(f"T2 maps at sigma={sigma}")
     fig.tight_layout()
     out = RESULTS_DIR / "maps_comparison.png"
     fig.savefig(out, dpi=120)
     plt.close(fig)
-    print(f"[ok] figura salvata: {out}")
+    print(f"[ok] figure saved: {out}")
 
 
 def _plot_mae_vs_noise(results: dict) -> None:
@@ -129,20 +129,20 @@ def _plot_mae_vs_noise(results: dict) -> None:
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.plot(sig, pinn, "o-", label="PINN")
     ax.plot(sig, ls, "s-", label="Least-squares")
-    ax.set_xlabel("sigma rumore")
-    ax.set_ylabel("MAE T2 (ms)")
-    ax.set_title("Robustezza al rumore: MAE T2 vs sigma")
+    ax.set_xlabel("noise sigma")
+    ax.set_ylabel("T2 MAE (ms)")
+    ax.set_title("Noise robustness: T2 MAE vs sigma")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     out = RESULTS_DIR / "mae_vs_noise.png"
     fig.savefig(out, dpi=120)
     plt.close(fig)
-    print(f"[ok] figura salvata: {out}")
+    print(f"[ok] figure saved: {out}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Valutazione PINN vs least-squares.")
+    parser = argparse.ArgumentParser(description="PINN vs least-squares evaluation.")
     parser.add_argument("--height", type=int, default=64)
     parser.add_argument("--width", type=int, default=64)
     parser.add_argument("--num-echoes", type=int, default=8)
@@ -167,7 +167,7 @@ def main() -> None:
     )
     out = RESULTS_DIR / "metrics.json"
     out.write_text(json.dumps(results, indent=2), encoding="utf-8")
-    print(f"[ok] metriche salvate: {out}")
+    print(f"[ok] metrics saved: {out}")
 
 
 if __name__ == "__main__":

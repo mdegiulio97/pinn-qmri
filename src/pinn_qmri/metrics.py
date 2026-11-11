@@ -1,4 +1,4 @@
-"""Metriche di errore tra mappa stimata e ground-truth."""
+"""Error metrics between an estimated map and the ground truth."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ def mae(pred: np.ndarray, true: np.ndarray, mask: np.ndarray | None = None) -> f
     """Mean Absolute Error.
 
     Args:
-        pred: mappa stimata.
-        true: mappa ground-truth.
-        mask: maschera booleana opzionale (valuta solo i pixel True).
+        pred: estimated map.
+        true: ground-truth map.
+        mask: optional boolean mask (only True pixels are evaluated).
     """
     pred, true = np.asarray(pred, float), np.asarray(true, float)
     diff = np.abs(pred - true)
@@ -32,7 +32,7 @@ def rmse(pred: np.ndarray, true: np.ndarray, mask: np.ndarray | None = None) -> 
 
 
 def mape(pred: np.ndarray, true: np.ndarray, mask: np.ndarray | None = None) -> float:
-    """Mean Absolute Percentage Error (%). Ignora pixel con true ~ 0."""
+    """Mean Absolute Percentage Error (%). Ignores pixels where true ~ 0."""
     pred, true = np.asarray(pred, float), np.asarray(true, float)
     valid = np.abs(true) > 1e-6
     if mask is not None:
@@ -44,7 +44,7 @@ def mape(pred: np.ndarray, true: np.ndarray, mask: np.ndarray | None = None) -> 
 def all_metrics(
     pred: np.ndarray, true: np.ndarray, mask: np.ndarray | None = None
 ) -> dict[str, float]:
-    """Restituisce MAE, RMSE e MAPE in un dizionario."""
+    """Return MAE, RMSE and MAPE in a dictionary."""
     return {
         "mae": mae(pred, true, mask),
         "rmse": rmse(pred, true, mask),
@@ -57,19 +57,19 @@ def rank_models(
     key: str = "rmse",
     lower_is_better: bool = True,
 ) -> list[tuple[str, float]]:
-    """Ordina i modelli per una metrica, dal migliore al peggiore.
+    """Sort models by a metric, from best to worst.
 
     Args:
-        metrics: mappa nome_modello -> dizionario di metriche
-            (ad esempio l'output di :func:`all_metrics` per ciascun modello).
-        key: nome della metrica su cui ordinare (default "rmse").
-        lower_is_better: se True valori piu' bassi sono migliori (errori come
-            MAE/RMSE); se False valori piu' alti sono migliori (ad esempio R^2).
+        metrics: mapping model_name -> dictionary of metrics
+            (for example the output of :func:`all_metrics` for each model).
+        key: name of the metric to sort on (default "rmse").
+        lower_is_better: if True, lower values are better (errors such as
+            MAE/RMSE); if False, higher values are better (for example R^2).
 
     Returns:
-        Lista di coppie ``(nome, valore)`` ordinata dal migliore al peggiore.
-        Su mappa vuota restituisce ``[]``. A parita' di valore l'ordine di
-        inserimento e' preservato (ordinamento stabile).
+        List of ``(name, value)`` pairs sorted from best to worst.
+        Returns ``[]`` for an empty mapping. Ties keep insertion order
+        (stable sort).
     """
     pairs = [(name, float(values[key])) for name, values in metrics.items()]
     return sorted(pairs, key=lambda item: item[1], reverse=not lower_is_better)
@@ -80,20 +80,20 @@ def best_model(
     key: str = "rmse",
     lower_is_better: bool = True,
 ) -> str:
-    """Nome del modello migliore secondo una metrica.
+    """Name of the best model according to a metric.
 
     Args:
-        metrics: mappa nome_modello -> dizionario di metriche.
-        key: nome della metrica su cui confrontare (default "rmse").
-        lower_is_better: se True valori piu' bassi sono migliori.
+        metrics: mapping model_name -> dictionary of metrics.
+        key: name of the metric to compare on (default "rmse").
+        lower_is_better: if True, lower values are better.
 
     Returns:
-        Il nome del modello migliore.
+        The name of the best model.
 
     Raises:
-        ValueError: se ``metrics`` e' vuoto (nessun modello da confrontare).
+        ValueError: if ``metrics`` is empty (no models to compare).
     """
     ranking = rank_models(metrics, key=key, lower_is_better=lower_is_better)
     if not ranking:
-        raise ValueError("Nessun modello da confrontare: la mappa delle metriche e' vuota.")
+        raise ValueError("No models to compare: the metrics mapping is empty.")
     return ranking[0][0]

@@ -1,7 +1,7 @@
-"""Smoke test dell'app Streamlit: il primo render gira senza eccezioni.
+"""Smoke test of the Streamlit app: the first render runs without exceptions.
 
-L'app non addestra nulla finche' non si preme il pulsante, quindi il primo render
-e' leggero: verifichiamo solo che non sollevi eccezioni e mostri il titolo.
+The app does not train anything until the button is pressed, so the first render
+is light: we only check that it raises no exception and shows the title.
 """
 
 from pathlib import Path
