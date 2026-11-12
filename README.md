@@ -1,4 +1,8 @@
-# pinn-qmri — PINN for T2 relaxometry (qMRI)
+# pinn-qmri
+
+[![CI](https://github.com/mdegiulio97/pinn-qmri/actions/workflows/ci.yml/badge.svg)](https://github.com/mdegiulio97/pinn-qmri/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+**PINN for T2 relaxometry (qMRI)**
 
 A small research project that estimates quantitative MRI parameters
 (**T2** relaxometry) with a **physics-informed neural network (PINN)** trained
